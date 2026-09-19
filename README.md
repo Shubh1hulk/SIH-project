@@ -2,6 +2,22 @@
 
 A complete prototype that predicts heart disease risk using a **stacked hybrid quantum committee** (Quantum Kernel SVM + bagged VQC ensemble + single VQC + tuned classical SVM and Logistic Regression, combined by an out-of-fold meta-learner), with the Quantum Kernel SVM as the flagship pure-quantum model. Preprocessing: imputation, scaling, supervised ANOVA feature selection, and angle scaling for quantum encoding. The system includes a QML frontend for data entry, a FastAPI backend for serving predictions, and a training script that compares quantum vs classical models.
 
+## About
+
+**SIH-project** is a technically documented hybrid quantum-classical heart
+disease prediction system. It uses PennyLane to execute four-qubit variational
+circuits and a quantum fidelity kernel, then combines those quantum models
+with tuned Random Forest, RBF-SVM, and logistic-regression baselines through an
+out-of-fold stacking layer. A FastAPI service exposes predictions and
+explainability data, while a PyQt5/QML desktop interface supports patient-form
+and CSV batch scoring.
+
+On the fixed Cleveland benchmark split (242 training rows and 61 test rows,
+`random_state=42`), the stacked committee reaches **85.25% accuracy**, tied
+with the tuned classical SVM. The repository includes the training pipeline,
+serialized model artifacts, leakage checks, technical quantum-space notes, and
+the generated model-comparison graph.
+
 Datasets: **Cleveland primary** — 303 patients in `data/heart.csv` (official headline split: 242 train / 61 test, `random_state=42`). **Combined expansion** — 918 real patients in `data/heart_combined.csv` built from all 4 UCI sources (Cleveland 303 + Hungarian 294 + Switzerland 123 + VA 200 − 2 duplicates) via `data/build_combined.py`; see `data/DATASET_PROVENANCE.md`. The Cleveland file is never overwritten.
 
 Reference test-set results (Cleveland, 80/20 stratified split, `random_state=42`, threshold tuned on train folds only):
