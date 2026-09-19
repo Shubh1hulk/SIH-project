@@ -10,6 +10,7 @@ env/
 # out of this list so the trained models ship with the project and it
 # runs out of the box without retraining.
 plots/
+!plots/model_comparison.png
 data/heart.csv
 
 # OS / editor noise

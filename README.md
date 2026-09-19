@@ -241,6 +241,110 @@ Full delivery map: see `DELIVERY.md`. Combined-dataset provenance: `data/DATASET
   `scripts/verify_no_leakage.py` (Youden's J) — the same routine runs inside
   `backend/train.py`.
 
+## Technical Model Notes
+
+### Quantum state space
+
+The quantum branch uses four qubits because preprocessing selects four
+clinical features. A single qubit has a two-dimensional computational basis,
+so four qubits span a Hilbert space of dimension $2^4 = 16$. The circuit state
+is represented as a normalized complex amplitude vector:
+
+```text
+|psi> = a_0|0000> + a_1|0001> + ... + a_15|1111>
+sum_i |a_i|^2 = 1
+```
+
+The model does not create sixteen clinical input columns. Instead, the four
+selected values are scaled to the angle interval $[0, pi]$ and encoded as
+single-qubit rotation angles. Trainable rotation gates and a CNOT ring create
+entanglement, allowing the measured expectation values to depend on joint
+feature relationships. The classical optimizer updates circuit parameters;
+the final expectation value is converted into a disease probability.
+
+Four qubits are a deliberate computational design choice. A state-vector
+simulation grows exponentially with the number of qubits, so $n$ qubits have
+$2^n$ amplitudes. The project keeps the quantum experiment small enough for a
+CPU while retaining a genuine entangling quantum feature map.
+
+### PennyLane implementation
+
+[PennyLane](https://pennylane.ai/) provides the differentiable quantum
+programming layer in `backend/quantum_model.py`. It supplies:
+
+- `default.qubit` state-vector simulation for the four-qubit circuits.
+- QNodes that expose circuit outputs to the classical optimizer.
+- Automatic differentiation of trainable gate parameters.
+- Quantum expectation values for VQC readout.
+- Fidelity-style kernel evaluation for the quantum kernel SVM.
+
+PennyLane is used for model computation, not as a decorative dependency. The
+VQC and quantum-kernel paths execute circuits during training and inference;
+the classical scikit-learn models provide the controlled baselines.
+
+### Model-by-model behavior
+
+1. **VQC** — A variational quantum classifier applies repeated data encoding,
+  trainable single-qubit rotations, and a CNOT-ring entangling layer. Adam
+  optimization trains the circuit for 120 epochs with cosine learning-rate
+  decay and L2 regularization. The readout is a trainable combination of
+  multi-qubit Z expectations.
+2. **VQC ensemble** — Multiple VQCs are trained on bootstrap samples with
+  independent seeds. Their probabilities are averaged, reducing variance
+  relative to one circuit. The standalone evaluation uses five members;
+  smaller ensembles are used inside cross-validation to control runtime.
+3. **Quantum kernel SVM** — PennyLane computes a fidelity kernel from the
+  quantum feature map. An SVM is trained on the cached kernel matrix, and
+  `C` is selected by five-fold validation without recomputing the circuit
+  kernel for every candidate.
+4. **Random Forest** — A bagged tree baseline trained on the same selected,
+  transformed features. Its feature importances provide the explainability
+  bars displayed by the UI.
+5. **Classical RBF SVM** — A nonlinear classical baseline tuned over `C` and
+  `gamma` with stratified five-fold cross-validation. It is the tied-best
+  individual model on the Cleveland test split.
+6. **Logistic Regression** — A linear, probability-producing baseline tuned
+  over regularization strength `C`. It also serves as the meta-learner for
+  the stacked committee.
+7. **Hybrid stacked committee** — The three quantum models and two selected
+  classical probability models produce out-of-fold predictions. A logistic
+  meta-learner combines those five columns. Its decision threshold is chosen
+  on out-of-fold predictions using Youden's J, keeping the test set isolated.
+
+## Accuracy Graph
+
+The following graph is generated from the fixed Cleveland evaluation split
+(303 rows, 242 train, 61 test, `random_state=42`). It compares accuracy,
+precision, recall, and F1 rather than reporting accuracy alone.
+
+![Model comparison across accuracy, precision, recall, and F1](plots/model_comparison.png)
+
+| Model | Accuracy | Precision | Recall | F1 | Technical interpretation |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Hybrid stacked committee | **0.8525** | 0.8519 | 0.8214 | 0.8364 | Quantum and classical probabilities combined by OOF logistic stacking |
+| Tuned RBF SVM | **0.8525** | 0.8519 | 0.8214 | 0.8364 | Best tied classical baseline on selected features |
+| VQC ensemble | 0.8361 | 0.8214 | 0.8214 | 0.8214 | Bootstrap aggregation of variational circuits |
+| Random Forest | 0.8361 | 0.8214 | 0.8214 | 0.8214 | Tree ensemble and explainability source |
+| Logistic Regression | 0.8361 | 0.8214 | 0.8214 | 0.8214 | Linear calibrated baseline |
+| Quantum kernel SVM | 0.7705 | 0.7500 | 0.7500 | 0.7500 | Fidelity-kernel classifier using the quantum feature map |
+| VQC | 0.7541 | 0.7407 | 0.7143 | 0.7273 | Single variational circuit without bagging |
+
+These values are test-set measurements, not training accuracy. The quantum
+models are included as first-class committee members even though the Cleveland
+headline result ties the tuned classical SVM. The comparison is intended to
+measure whether the quantum representation adds useful signal under the same
+leakage-free split and preprocessing contract.
+
+### Reproducing the graph
+
+```bash
+MPLBACKEND=Agg python backend/train.py
+```
+
+This retrains the models, updates `backend/artifacts/`, and writes
+`plots/model_comparison.png`. The committed image is included so the results
+are visible directly from the repository without retraining.
+
 ## FAQ — Why quantum if it ties?
 
 **Q1 Why quantum if hybrid just ties classical?**
