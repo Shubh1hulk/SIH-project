@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+**/venv/
+env/
+.venv/
+
+# Regenerable outputs — NOTE: backend/artifacts/ is intentionally kept
+# out of this list so the trained models ship with the project and it
+# runs out of the box without retraining.
+plots/
+data/heart.csv
+
+# OS / editor noise
+.DS_Store
+*.log
+
+.freebuff/
+.vscode/
+
+# Keep combined dataset (real UCI patients, not regenerable offline)
+!data/heart_combined.csv
+!data/DATASET_PROVENANCE.md
+!data/build_combined.py
